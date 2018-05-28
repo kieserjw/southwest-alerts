@@ -2,8 +2,8 @@ import logging
 import requests
 import sys
 
-from southwestalerts.southwest import Southwest
-from southwestalerts import settings
+from southwest import Southwest
+import settings
 
 
 def check_for_price_drops(username, password, email):
@@ -13,7 +13,7 @@ def check_for_price_drops(username, password, email):
             passenger = flight['passengers'][0]
             record_locator = flight['recordLocator']
             cancellation_details = southwest.get_cancellation_details(record_locator, passenger['firstName'], passenger['lastName'])
-            itinerary_price = cancellation_details['pointsRefund']['amountPoints']
+            itinerary_price = cancellation_details['availableFunds']['nonrefundableAmountCents'] / 100.00
             # Calculate total for all of the legs of the flight
             matching_flights_price = 0
             for origination_destination in cancellation_details['itinerary']['originationDestinations']:
@@ -31,13 +31,14 @@ def check_for_price_drops(username, password, email):
 
                 # Find that the flight that matches the purchased flight
                 matching_flight = next(f for f in available['trips'][0]['airProducts'] if f['segments'][0]['departureDateTime'] == departure_datetime and f['segments'][-1]['arrivalDateTime'] == arrival_datetime)
-                matching_flight_price = matching_flight['fareProducts'][-1]['pointsPrice']['discountedRedemptionPoints']
+                matching_flight_price = matching_flight['fareProducts'][-1]['currencyPrice']['discountedTotalFareCents']
                 matching_flights_price += matching_flight_price
 
+            matching_flights_price = matching_flights_price / 100.00
             # Calculate refund details (current flight price - sum(current price of all legs), and print log message
             refund_amount = itinerary_price - matching_flights_price
-            message = '{base_message} points detected for flight {record_locator} from {origin_airport} to {destination_airport} on {departure_date}'.format(
-                base_message='Price drop of {}'.format(refund_amount) if refund_amount > 0 else 'Price increase of {}'.format(refund_amount * -1),
+            message = '{base_message} detected for itinerary {record_locator} from {origin_airport} to {destination_airport} returning on {departure_date}'.format(
+                base_message='Price drop of ${0:.2f}'.format(refund_amount) if refund_amount > 0 else 'Price increase of ${0:.2f}'.format(refund_amount * -1),
                 refund_amount=refund_amount,
                 record_locator=record_locator,
                 origin_airport=origin_airport,
